@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - chaty-apk-build
-  pull_request:
-    branches:
-      - master
   workflow_dispatch:
 
 permissions:
@@ -43,12 +40,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          rm -rf /tmp/chaty-build
           mkdir -p /tmp/chaty-build/source
           cat chaty-build/chunk_00.b64 chaty-build/chunk_01.b64 chaty-build/chunk_02_*.part chaty-build/chunk_03.b64 chaty-build/chunk_04.b64 chaty-build/chunk_05.b64 chaty-build/chunk_06.b64 chaty-build/chunk_07.b64 | base64 --decode > /tmp/chaty-build/chaty.zip
           echo "8aeb1c7e54b0c35ebf324627ba4e9745b4d0c2fdc52b6ace8a2138b5c85b98f8  /tmp/chaty-build/chaty.zip" | sha256sum --check
           unzip -q /tmp/chaty-build/chaty.zip -d /tmp/chaty-build/source
           test -f /tmp/chaty-build/source/chaty_flutter/pubspec.yaml
           cp -a /tmp/chaty-build/source/chaty_flutter ./chaty_flutter
+
+      - name: Pin Android-compatible secure storage
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed -i 's/flutter_secure_storage: \^11\.0\.0/flutter_secure_storage: 10.3.1/' chaty_flutter/pubspec.yaml
+          grep 'flutter_secure_storage:' chaty_flutter/pubspec.yaml
 
       - name: Install Flutter
         uses: subosito/flutter-action@v2
@@ -70,20 +75,19 @@ jobs:
           flutter create --platforms=android --org com.chaty /tmp/chaty_host
           cp -a /tmp/chaty_host/android ./chaty_flutter/android
           APP_GRADLE=chaty_flutter/android/app/build.gradle.kts
-          sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 37/' "$APP_GRADLE"
           sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 24/' "$APP_GRADLE"
-          echo 'android.suppressUnsupportedCompileSdk=37' >> chaty_flutter/android/gradle.properties
-
-      - name: Install Android API 37
-        shell: bash
-        run: |
-          set -euo pipefail
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager 'platforms;android-37' 'build-tools;37.0.0'
 
       - name: Resolve dependencies
         working-directory: chaty_flutter
         run: flutter pub get
+
+      - name: Analyze
+        working-directory: chaty_flutter
+        run: flutter analyze
+
+      - name: Test
+        working-directory: chaty_flutter
+        run: flutter test
 
       - name: Build Android APK
         working-directory: chaty_flutter
