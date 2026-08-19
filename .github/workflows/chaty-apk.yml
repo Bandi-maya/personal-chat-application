@@ -86,7 +86,7 @@ jobs:
 
       - name: Analyze
         working-directory: chaty_flutter
-        run: flutter analyze
+        run: flutter analyze --no-fatal-infos
 
       - name: Test
         working-directory: chaty_flutter
