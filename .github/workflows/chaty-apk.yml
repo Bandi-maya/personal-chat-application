@@ -33,6 +33,93 @@ jobs:
           test -f /tmp/chaty-build/source/chaty_flutter/pubspec.yaml
           cp -a /tmp/chaty-build/source/chaty_flutter ./chaty_flutter
 
+      - name: Fix registration confirmation flow
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('chaty_flutter/lib/features/auth/presentation/register_screen.dart')
+          s = p.read_text()
+          old = """      if (response.session == null) {
+                await showDialog<void>(
+                  context: context,
+                  builder: (BuildContext context) => AlertDialog(
+                    title: const Text('Verify your email'),
+                    content: const Text(
+                      'Your account was created. Open the verification email, then sign in.',
+                    ),
+                    actions: [
+                      FilledButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('Continue'),
+                      ),
+                    ],
+                  ),
+                );
+                if (mounted) context.go('/login');
+              } else {
+                context.go('/home');
+              }"""
+          new = """      if (response.session == null) {
+                final bool? confirmed = await showDialog<bool>(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (BuildContext dialogContext) => AlertDialog(
+                    title: const Text('Verify your email'),
+                    content: const Text(
+                      'Your account is created. Open the verification email once, then return here and tap I verified my email.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(dialogContext).pop(false),
+                        child: const Text('Not yet'),
+                      ),
+                      FilledButton(
+                        onPressed: () => Navigator.of(dialogContext).pop(true),
+                        child: const Text('I verified my email'),
+                      ),
+                    ],
+                  ),
+                );
+
+                if (!mounted) return;
+                if (confirmed != true) {
+                  setState(() {
+                    _error = 'Verify your email, then tap Create account again or sign in with the same email and password.';
+                  });
+                  return;
+                }
+
+                try {
+                  final signInResponse = await ref
+                      .read(authRepositoryProvider)
+                      .signIn(
+                        email: _emailController.text,
+                        password: _passwordController.text,
+                      )
+                      .timeout(const Duration(seconds: 15));
+                  if (!mounted) return;
+                  if (signInResponse.session == null) {
+                    setState(() {
+                      _error = 'Email verification is not active yet. Wait a few seconds and try again.';
+                    });
+                    return;
+                  }
+                  context.go('/home');
+                } catch (error) {
+                  if (!mounted) return;
+                  setState(() {
+                    _error = 'Your account exists, but sign-in is not ready yet. Make sure the email is verified and use the same password, then try again.';
+                  });
+                }
+              } else {
+                context.go('/home');
+              }"""
+          if old not in s:
+              raise SystemExit('registration block not found')
+          p.write_text(s.replace(old, new))
+          PY
+
       - name: Pin Android-compatible secure storage
         shell: bash
         run: |
@@ -81,17 +168,17 @@ jobs:
           set -euo pipefail
           APK=chaty_flutter/build/app/outputs/flutter-apk/app-debug.apk
           test -s "$APK"
-          cp "$APK" Chaty-configured-debug.apk
-          sha256sum Chaty-configured-debug.apk | tee Chaty-configured-debug.apk.sha256
-          unzip -t Chaty-configured-debug.apk >/dev/null
-          ls -lh Chaty-configured-debug.apk
+          cp "$APK" Chaty-auth-fixed-debug.apk
+          sha256sum Chaty-auth-fixed-debug.apk | tee Chaty-auth-fixed-debug.apk.sha256
+          unzip -t Chaty-auth-fixed-debug.apk >/dev/null
+          ls -lh Chaty-auth-fixed-debug.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Chaty-Configured-Android-APK
+          name: Chaty-Auth-Fixed-Android-APK
           path: |
-            Chaty-configured-debug.apk
-            Chaty-configured-debug.apk.sha256
+            Chaty-auth-fixed-debug.apk
+            Chaty-auth-fixed-debug.apk.sha256
           if-no-files-found: error
           retention-days: 7
