@@ -21,6 +21,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verify source payload chunks
+        shell: bash
+        run: |
+          set -euo pipefail
+          wc -c chaty-build/chunk_*.b64
+          sha256sum chaty-build/chunk_*.b64
+          echo '8ba956aa1ee224f6d45ebce449d90c84ee525b49a87b158c2eeb44fbefad7470  chaty-build/chunk_00.b64' | sha256sum -c
+          echo 'bf8250896f1ffbd88b69672f0d4ae3128f1ad6537e40b9a2bc825700d925e725  chaty-build/chunk_01.b64' | sha256sum -c
+          echo '53f1982225ce536ccb6fe40573928af3166c201a6c82140113057473c4ea148d  chaty-build/chunk_02.b64' | sha256sum -c
+          echo '3f6094ea51f498ff4626e01ce2051925753cd213ee922dea94da742069b6b969  chaty-build/chunk_03.b64' | sha256sum -c
+          echo 'aa90de4e75656bfbb5a61f05da1ceca93506de25c156557e711619dc0835f246  chaty-build/chunk_04.b64' | sha256sum -c
+          echo 'c1d5b02ec935b970a7fc594421cd2efa74edcb2d83c37ee7e2643cbb25bacbda  chaty-build/chunk_05.b64' | sha256sum -c
+          echo 'c842769d5a37896b055689536b6899bd67d429e5ef5444c8ee85909f784c1141  chaty-build/chunk_06.b64' | sha256sum -c
+          echo '8e5a08eb8c7c65a901e79d725f30d179b7b7ffcc09bf6e09c7b94aa765245e56  chaty-build/chunk_07.b64' | sha256sum -c
+
       - name: Reconstruct and verify Chaty source
         shell: bash
         run: |
