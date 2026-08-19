@@ -1,0 +1,204 @@
+name: Build Chaty APK
+
+on:
+  push:
+    branches:
+      - chaty-apk-build
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Reconstruct Chaty source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/chaty-build chaty_flutter
+          mkdir -p /tmp/chaty-build/source
+          cat chaty-build/chunk_00.b64 chaty-build/chunk_01.b64 chaty-build/chunk_02_*.part chaty-build/chunk_03.b64 chaty-build/chunk_04.b64 chaty-build/chunk_05.b64 chaty-build/chunk_06.b64 chaty-build/chunk_07.b64 | base64 --decode > /tmp/chaty-build/chaty.zip
+          echo "8aeb1c7e54b0c35ebf324627ba4e9745b4d0c2fdc52b6ace8a2138b5c85b98f8  /tmp/chaty-build/chaty.zip" | sha256sum --check
+          unzip -q /tmp/chaty-build/chaty.zip -d /tmp/chaty-build/source
+          cp -a /tmp/chaty-build/source/chaty_flutter ./chaty_flutter
+
+      - name: Fix mobile email confirmation flow
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          repo = Path('chaty_flutter/lib/features/auth/data/auth_repository.dart')
+          s = repo.read_text()
+          old = """    return _client.auth.signUp(
+      email: email.trim(),
+      password: password,
+      data: <String, dynamic>{"""
+          new = """    return _client.auth.signUp(
+      email: email.trim(),
+      password: password,
+      emailRedirectTo: 'chaty://login-callback/',
+      data: <String, dynamic>{"""
+          if old not in s:
+              raise SystemExit('auth signUp block not found')
+          repo.write_text(s.replace(old, new))
+
+          screen = Path('chaty_flutter/lib/features/auth/presentation/register_screen.dart')
+          s = screen.read_text()
+          old = """      if (response.session == null) {
+        await showDialog<void>(
+          context: context,
+          builder: (BuildContext context) => AlertDialog(
+            title: const Text('Verify your email'),
+            content: const Text(
+              'Your account was created. Open the verification email, then sign in.',
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Continue'),
+              ),
+            ],
+          ),
+        );
+        if (mounted) context.go('/login');
+      } else {
+        context.go('/home');
+      }"""
+          new = """      if (response.session == null) {
+        final bool? confirmed = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext dialogContext) => AlertDialog(
+            title: const Text('Verify your email'),
+            content: const Text(
+              'We sent a confirmation email. Tap the confirmation link. Android will reopen Chaty automatically. Then return here and tap Continue.',
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('Continue'),
+              ),
+            ],
+          ),
+        );
+
+        if (!mounted || confirmed != true) return;
+        try {
+          final signInResponse = await ref
+              .read(authRepositoryProvider)
+              .signIn(
+                email: _emailController.text,
+                password: _passwordController.text,
+              )
+              .timeout(const Duration(seconds: 15));
+          if (!mounted) return;
+          if (signInResponse.session != null) {
+            context.go('/home');
+            return;
+          }
+          setState(() {
+            _error = 'Email verification is still pending. Open the newest confirmation email and try again.';
+          });
+        } catch (_) {
+          if (!mounted) return;
+          setState(() {
+            _error = 'Email verification is still pending. Open the newest confirmation email and try again.';
+          });
+        }
+      } else {
+        context.go('/home');
+      }"""
+          if old not in s:
+              raise SystemExit('register confirmation block not found')
+          screen.write_text(s.replace(old, new))
+          PY
+
+      - name: Pin Android-compatible secure storage
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed -i 's/flutter_secure_storage: \^11\.0\.0/flutter_secure_storage: 10.3.1/' chaty_flutter/pubspec.yaml
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+
+      - name: Generate Android host and register deep link
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/chaty_host
+          flutter create --platforms=android --org com.chaty /tmp/chaty_host
+          cp -a /tmp/chaty_host/android ./chaty_flutter/android
+          sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 24/' chaty_flutter/android/app/build.gradle.kts
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('chaty_flutter/android/app/src/main/AndroidManifest.xml')
+          s = p.read_text()
+          marker = '</intent-filter>'
+          i = s.find(marker)
+          if i < 0:
+              raise SystemExit('launcher intent filter not found')
+          i += len(marker)
+          deep_link = '''
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="chaty" android:host="login-callback" />
+            </intent-filter>'''
+          p.write_text(s[:i] + deep_link + s[i:])
+          PY
+
+      - name: Resolve dependencies
+        working-directory: chaty_flutter
+        run: flutter pub get
+
+      - name: Analyze
+        working-directory: chaty_flutter
+        run: flutter analyze --no-fatal-infos
+
+      - name: Test
+        working-directory: chaty_flutter
+        run: flutter test
+
+      - name: Build configured Android APK
+        working-directory: chaty_flutter
+        run: >-
+          flutter build apk --debug --no-pub
+          --dart-define=SUPABASE_URL=https://dntnxeanubswyswahdnj.supabase.co
+          --dart-define=SUPABASE_PUBLISHABLE_KEY=sb_publishable_gFpVYJctaDkRRgttvnUl-A_TKu81hFF
+
+      - name: Verify APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=chaty_flutter/build/app/outputs/flutter-apk/app-debug.apk
+          test -s "$APK"
+          cp "$APK" Chaty-deeplink-fixed-debug.apk
+          sha256sum Chaty-deeplink-fixed-debug.apk | tee Chaty-deeplink-fixed-debug.apk.sha256
+          unzip -t Chaty-deeplink-fixed-debug.apk >/dev/null
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Chaty-DeepLink-Fixed-Android-APK
+          path: |
+            Chaty-deeplink-fixed-debug.apk
+            Chaty-deeplink-fixed-debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 7
