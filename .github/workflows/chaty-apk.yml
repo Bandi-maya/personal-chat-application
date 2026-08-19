@@ -66,9 +66,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf /tmp/chaty-host
-          flutter create --platforms=android --org com.chaty /tmp/chaty-host
-          cp -a /tmp/chaty-host/android ./chaty_flutter/android
+          rm -rf /tmp/chaty_host
+          flutter create --platforms=android --org com.chaty /tmp/chaty_host
+          cp -a /tmp/chaty_host/android ./chaty_flutter/android
           APP_GRADLE=chaty_flutter/android/app/build.gradle.kts
           if [ -f "$APP_GRADLE" ]; then
             sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 24/' "$APP_GRADLE"
