@@ -1,0 +1,1 @@
+Trigger Chaty deep-link Android APK build for mobile email confirmation redirect.
