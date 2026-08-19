@@ -25,11 +25,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          wc -c chaty-build/chunk_*.b64
-          sha256sum chaty-build/chunk_*.b64
           echo '8ba956aa1ee224f6d45ebce449d90c84ee525b49a87b158c2eeb44fbefad7470  chaty-build/chunk_00.b64' | sha256sum -c
           echo 'bf8250896f1ffbd88b69672f0d4ae3128f1ad6537e40b9a2bc825700d925e725  chaty-build/chunk_01.b64' | sha256sum -c
-          echo '53f1982225ce536ccb6fe40573928af3166c201a6c82140113057473c4ea148d  chaty-build/chunk_02.b64' | sha256sum -c
+          echo '2e064ab06f55b2fe9f25657f752801012f1fc6a1d425f940cfaf8b46f7539f6b  chaty-build/chunk_02_0.part' | sha256sum -c
+          echo '6b64f5b3503d242d045d6e33de6c8e504ce49403982ab743b072f1eb43f5d63d  chaty-build/chunk_02_1.part' | sha256sum -c
+          echo '60c52503fd4b04373223f3923a4fd03ac1a1ab3fdc800b36d7691f687b538ac5  chaty-build/chunk_02_2.part' | sha256sum -c
+          echo 'be51db2dff7318743ad6c84bc84cbb96ef6d4e304f4d823e22dc3ce2d86b5b4a  chaty-build/chunk_02_3.part' | sha256sum -c
+          echo '1cea50010a75fd5c16cac7b1a3922e808e2920dc15370a26b2a75738bc87eb63  chaty-build/chunk_02_4.part' | sha256sum -c
+          echo '7233cc2b655a94ec4f44b62475da8b045f23653f5d1fecad0fcbc02ae759e039  chaty-build/chunk_02_5.part' | sha256sum -c
           echo '3f6094ea51f498ff4626e01ce2051925753cd213ee922dea94da742069b6b969  chaty-build/chunk_03.b64' | sha256sum -c
           echo 'aa90de4e75656bfbb5a61f05da1ceca93506de25c156557e711619dc0835f246  chaty-build/chunk_04.b64' | sha256sum -c
           echo 'c1d5b02ec935b970a7fc594421cd2efa74edcb2d83c37ee7e2643cbb25bacbda  chaty-build/chunk_05.b64' | sha256sum -c
@@ -41,7 +44,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/chaty-build/source
-          cat chaty-build/chunk_*.b64 | base64 --decode > /tmp/chaty-build/chaty.zip
+          cat chaty-build/chunk_00.b64 chaty-build/chunk_01.b64 chaty-build/chunk_02_*.part chaty-build/chunk_03.b64 chaty-build/chunk_04.b64 chaty-build/chunk_05.b64 chaty-build/chunk_06.b64 chaty-build/chunk_07.b64 | base64 --decode > /tmp/chaty-build/chaty.zip
           echo "8aeb1c7e54b0c35ebf324627ba4e9745b4d0c2fdc52b6ace8a2138b5c85b98f8  /tmp/chaty-build/chaty.zip" | sha256sum --check
           unzip -q /tmp/chaty-build/chaty.zip -d /tmp/chaty-build/source
           test -f /tmp/chaty-build/source/chaty_flutter/pubspec.yaml
